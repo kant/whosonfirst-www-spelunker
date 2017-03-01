@@ -32,7 +32,7 @@ yesnofix:
 	curl -s -o www/static/javascript/mapzen.whosonfirst.yesnofix.js https://raw.githubusercontent.com/whosonfirst/js-mapzen-whosonfirst-yesnofix/master/src/mapzen.whosonfirst.yesnofix.js
 
 styleguide:
-	curl -s -o www/static/css/mapzen.styleguide.css https://mapzen.com/common/styleguide/styles/styleguide.css
+	curl -s -o www/static/css/mapzen.styleguide.css https://dev.mapzen.com/common/styleguide/styles/styleguide.css
 
 tangram:
 	curl -s -o www/static/javascript/tangram.js https://mapzen.com/tangram/tangram.debug.js
