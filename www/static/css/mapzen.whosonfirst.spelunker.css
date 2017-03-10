@@ -305,3 +305,24 @@ pre {
 .inc-docs-meta li:last-child:after {
     content: "" !important;
 }
+
+/* override the default mapzen styleguide... */
+
+.container {
+    width: auto !important;
+    margin-left: 5% !important;
+    margin-right: 10% !important;
+    border: none;
+}
+
+.list {
+    padding-left: 0px !important;
+}
+
+#content h2,h3 {
+    margin-top: 0px !important;
+}
+
+.wof-short-description {
+    margin-bottom: 2em;
+}
