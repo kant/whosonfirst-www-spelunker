@@ -128,6 +128,7 @@ def init():
 
     flask.g.enable_feature_bundler = int(os.environ.get('SPELUNKER_ENABLE_FEATURE_BUNDLER', 0))
     flask.g.enable_feature_staticmaps = int(os.environ.get('SPELUNKER_ENABLE_FEATURE_STATICMAPS', 0))
+    flask.g.enable_feature_yesnofix = int(os.environ.get('SPELUNKER_ENABLE_FEATURE_YESNOFIX', 0))
 
 @app.template_filter()
 def country_name(code):
