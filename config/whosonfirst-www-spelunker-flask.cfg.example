@@ -12,4 +12,4 @@ data_root=https://whosonfirst.mapzen.com/data
 static_root=https://whosonfirst.mapzen.com/static
 enable_feature_bundler=0
 enable_feature_staticmaps=0
-enable_feature_yesnofix=0
+enable_feature_yesnofix=1

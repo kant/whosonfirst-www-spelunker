@@ -56,6 +56,7 @@
 
     <script type="text/javascript" src="{{ url_for('static', filename='javascript/slippymap.crosshairs.js') }}"></script>
 
+    {# https://github.com/whosonfirst/whosonfirst-www-spelunker/issues/92 #}
     {% if g.enable_feature_yesnofix %}
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/mapzen.whosonfirst.yesnofix.css') }}" />
     <script type="text/javascript" src="{{ url_for('static', filename='javascript/mapzen.whosonfirst.yesnofix.js') }}"></script>
