@@ -326,3 +326,17 @@ pre {
 .wof-short-description {
     margin-bottom: 2em;
 }
+
+table,tr,td,th { 
+    border: none !important;
+}
+
+table {
+    margin-bottom: 1em !important;
+    border: solid thin !important;
+}
+
+td {
+    padding-left:1em !important;
+    padding-top: .5em !important;
+}
