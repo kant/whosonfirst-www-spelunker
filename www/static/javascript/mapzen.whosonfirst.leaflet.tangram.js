@@ -9,6 +9,8 @@ mapzen.whosonfirst.leaflet.tangram = (function(){
 
 	var _scenefile = 'static/tangram/refill.yaml'
 	var _key = 'mapzen-XXXXXXX';
+    var _tile_url = 'https://tile.mapzen.com/mapzen/vector/v1/all/{z}/{x}/{y}.topojson';
+   
 	var _cache = {};
 
 	var self = {
@@ -65,7 +67,8 @@ mapzen.whosonfirst.leaflet.tangram = (function(){
 				scene: {
 					import: scenefile,
 					global: {
-						sdk_mapzen_api_key: _key
+						sdk_mapzen_api_key: _key,
+					    sdk_mapzen_tile_url: _tile_url,
 					}
 				},
 				numWorkers: 2,
@@ -258,7 +261,11 @@ mapzen.whosonfirst.leaflet.tangram = (function(){
 
 		set_key: function(api_key) {
 			_key = api_key;
-		}
+		},
+
+	    set_tile_url: function(tile_url) {
+		_tile_url = tile_url;
+	    }
 
 	};
 
