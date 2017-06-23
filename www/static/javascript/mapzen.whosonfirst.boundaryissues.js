@@ -48,7 +48,18 @@ mapzen.whosonfirst.boundaryissues = (function(){
 		    continue;
 		}
 		
-		var edit_url = "https://whosonfirst.mapzen.com/boundaryissues/id/" + wofid;
+		wofid = parseInt(wofid);
+
+		// strictly speaking this means we don't link to the record
+		// for Earth... oh well (20170623/thisisaaronland)
+
+		if (! wofid){
+		    continue;
+		}
+
+		var enc_wofid = encodeURIComponent(wofid);
+
+		var edit_url = "https://whosonfirst.mapzen.com/boundaryissues/id/" + enc_wofid;
 
 		var wrapper = document.createElement("span");
 		wrapper.setAttribute("class", "edit-boundary-issues");
