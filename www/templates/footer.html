@@ -5,5 +5,7 @@
 	<script src="{{ url_for('static', filename='javascript/mapzen.whosonfirst.boundaryissues.js') }}"></script>
 
 	<script type="text/javascript">
-	  mapzen.whosonfirst.boundaryissues.editify();
+	  window.addEventListener("load", function load(event){
+		  mapzen.whosonfirst.boundaryissues.editify();
+	  });
 	</script>

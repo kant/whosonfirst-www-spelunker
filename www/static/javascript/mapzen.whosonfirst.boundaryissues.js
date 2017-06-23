@@ -3,16 +3,18 @@ mapzen.whosonfirst = mapzen.whosonfirst || {};
 
 mapzen.whosonfirst.boundaryissues = (function(){
 
+    var cookie_name = "boundaryissues";
     var cookie_jar = {};
 
-    var cookies = document.cookies;
-    cookies = cookies.split(";");
+    var cookie = document.cookie;
+    var cookies = cookie.split(";");
     
     var count_cookies = cookies.length;
     
     for (var i=0; i < count_cookies; i++){
+
 	var str_cookie = cookies[i];
-	var pair = str_cookie.split("-");
+	var pair = str_cookie.split("=");
 
 	cookie_jar[pair[0]] = pair[1];
     }
@@ -20,8 +22,7 @@ mapzen.whosonfirst.boundaryissues = (function(){
     var self = {
 	
 	'can_edit': function(){
-	    
-	    return (cookie_jar["boundary_issues"]) ? true : false;
+	    return (cookie_jar[ cookie_name ]) ? true : false;
 	},
 
 	'editify': function(class_name){
