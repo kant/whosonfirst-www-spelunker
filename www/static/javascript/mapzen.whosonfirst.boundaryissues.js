@@ -17,7 +17,6 @@ mapzen.whosonfirst.boundaryissues = (function(){
 	str_cookie = str_cookie.trim();
 
 	var pair = str_cookie.split("=");
-
 	cookie_jar[pair[0]] = pair[1];
     }
 
@@ -56,6 +55,7 @@ mapzen.whosonfirst.boundaryissues = (function(){
 
 		var link = document.createElement("a");
 		link.setAttribute("href", edit_url);
+		link.setAttribute("target", "boundary-issues-" + wofid);
 		link.setAttribute("title", "Edit this place in Boundary Issues");
 
 		link.appendChild(document.createTextNode("✍"));
