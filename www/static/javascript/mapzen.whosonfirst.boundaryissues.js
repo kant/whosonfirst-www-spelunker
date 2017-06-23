@@ -14,6 +14,8 @@ mapzen.whosonfirst.boundaryissues = (function(){
     for (var i=0; i < count_cookies; i++){
 
 	var str_cookie = cookies[i];
+	str_cookie = str_cookie.trim();
+
 	var pair = str_cookie.split("=");
 
 	cookie_jar[pair[0]] = pair[1];
