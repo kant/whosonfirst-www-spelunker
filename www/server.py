@@ -32,6 +32,7 @@ import machinetag.elasticsearch.wildcard
 import machinetag.elasticsearch.hierarchy
 
 import mapzen.whosonfirst.elasticsearch
+import mapzen.whosonfirst.languages
 
 import mapzen.whosonfirst.utils as utils
 import mapzen.whosonfirst.placetypes as pt
@@ -325,8 +326,13 @@ def json(id):
 def lastmod_week():
     return lastmod_days(7)
 
+@app.route("/recent/facets", methods=["GET"])
+@app.route("/recent/facets/", methods=["GET"])
+def lastmod_week_facets():
+    return lastmod_days_facets(7)
+
 @app.route("/recent/<int:days>", methods=["GET"])
-@app.route("/recent/<int:days>", methods=["GET"])
+@app.route("/recent/<int:days>/", methods=["GET"])
 def lastmod_days(days):
 
     min_days = 1
@@ -338,6 +344,51 @@ def lastmod_days(days):
     if days > max_days:
         return flask.render_template('recent.html', err_days=1, min_days=min_days, max_days=max_days)
 
+    query = lastmod_days_query(days)
+
+    sort = [
+        { 'wof:lastmodified': { 'order': 'desc', 'mode': 'max' } }
+    ]
+
+    body = {
+        'query': query,
+        'sort': sort
+    }
+
+    params = {}
+
+    page = get_int('page')
+    page = get_single(page)
+
+    if page:
+        params['page'] = page
+
+    rsp = flask.g.search_idx.query(body=body, params=params)
+    rsp = flask.g.search_idx.standard_rsp(rsp, **params)
+
+    pagination = rsp['pagination']
+    docs = rsp['rows']
+
+    docs = docs_to_geojson(docs)
+
+    pagination_url = build_pagination_url()
+    facet_url = build_facet_url()
+
+    template_args = {
+        'timing': rsp.get("timing", None),
+        'days': days,
+        'es_query': body,
+        'timing': rsp.get("timing", None),
+        'docs': docs,
+        'pagination': pagination,
+        'pagination_url': pagination_url,
+        'facet_url': facet_url
+    }
+
+    return flask.render_template('recent.html', **template_args)
+
+def lastmod_days_query(days):
+
     now = int(time.time())
     then = now - (86400 * days)
 
@@ -347,58 +398,30 @@ def lastmod_days(days):
         }    
     }
 
-    query = enfilterify(query)
-    
-    sort = [
-        { 'wof:lastmodified': { 'order': 'desc', 'mode': 'max' } }
-    ]
+    return enfilterify(query)
 
-    body = {
-        'query': query,
-        'sort': sort
-    }
+@app.route("/recent/<int:days>/facets", methods=["GET"])
+@app.route("/recent/<int:days>/facets/", methods=["GET"])
 
-    params = {}
+def lastmod_days_facets(days):
 
-    page = get_int('page')
-    page = get_single(page)
+    min_days = 1
+    max_days = 90
 
-    if page:
-        params['page'] = page
+    if days < min_days:
+        flask.abort(400)
 
-    rsp = flask.g.search_idx.query(body=body, params=params)
-    rsp = flask.g.search_idx.standard_rsp(rsp, **params)
+    if days > max_days:
+        flask.abort(400)
 
-    pagination = rsp['pagination']
-    docs = rsp['rows']
-
-    docs = docs_to_geojson(docs)
-
-    facets = facetify(query)
-
-    pagination_url = build_pagination_url()
-    facet_url = pagination_url
-
-    template_args = {
-        'days': days,
-        'es_query': body,
-        'docs': docs,
-        'pagination': pagination,
-        'pagination_url': pagination_url,
-        'facets': facets,
-        'facet_url': facet_url
-    }
-
-    return flask.render_template('recent.html', **template_args)
+    query = lastmod_days_query(days)
+    return send_facets(query)
 
 @app.route("/current", methods=["GET"])
 @app.route("/current/", methods=["GET"])
 def current():
 
-    query = {
-        'match': { 'mz:is_current': 1 }
-    }
-
+    query = current_query()
     query = enfilterify(query)
     
     sort = [
@@ -426,25 +449,62 @@ def current():
 
     docs = docs_to_geojson(docs)
 
-    facets = facetify(query)
-
     pagination_url = build_pagination_url()
-    facet_url = pagination_url
+    facet_url = build_facet_url()
 
     template_args = {
+        'timing': rsp.get("timing", None),
         'es_query': body,
+        'timing': rsp.get("timing", None),
         'docs': docs,
         'pagination': pagination,
         'pagination_url': pagination_url,
-        'facets': facets,
         'facet_url': facet_url
     }
 
     return flask.render_template('current.html', **template_args)
 
+def current_query():
+
+    query = {
+        'match': { 'mz:is_current': 1 }
+    }
+
+    return qury
+
+@app.route("/current/facets", methods=["GET"])
+@app.route("/current/facets/", methods=["GET"])
+def current_facets():
+
+    query = current_query()
+    return send_facets(query)
+
 @app.route("/random", methods=["GET"])
 @app.route("/random/", methods=["GET"])
 def random_place():
+
+    query = random_place_query()
+
+    body = { 'query': query }
+    params = { 'per_page': 1 }
+
+    rsp = flask.g.search_idx.query(body=body, params=params)
+    doc = flask.g.search_idx.single(rsp)
+
+    if doc == None:
+        logging.error("failed to get random document")
+        flask.abort(404)
+
+    # TO DO need to sort out redirects which currently end up with port
+    # numbers being tacked on... (20170322/thisisaaronland)
+
+    id = doc['_id']
+    url = flask.url_for('info', id=id)
+
+    logging.debug("redirect random to %s" % url)
+    return flask.redirect(url)
+
+def random_place_query():
 
     now = time.time()
     now = int(now)
@@ -489,24 +549,7 @@ def random_place():
         }
     }
 
-    body = { 'query': query }
-    params = { 'per_page': 1 }
-
-    rsp = flask.g.search_idx.query(body=body, params=params)
-    doc = flask.g.search_idx.single(rsp)
-
-    if doc == None:
-        logging.error("failed to get random document")
-        flask.abort(404)
-
-    # TO DO need to sort out redirects which currently end up with port
-    # numbers being tacked on... (20170322/thisisaaronland)
-
-    id = doc['_id']
-    url = flask.url_for('info', id=id)
-
-    logging.debug("redirect random to %s" % url)
-    return flask.redirect(url)
+    return query
 
 @app.route("/brands", methods=["GET"])
 @app.route("/brands/", methods=["GET"])
@@ -538,15 +581,7 @@ def brands():
 @app.route("/brands/<int:id>/", methods=["GET"])
 def brand(id):
 
-    brand_id = sanitize_int(id)
-
-    query = {
-        'term': {
-            'wof:brand_id': brand_id
-        }
-    }
-
-    query = enfilterify(query)
+    query = brand_query(id)
 
     body = {
         'query': query,
@@ -568,22 +603,40 @@ def brand(id):
 
     docs = docs_to_geojson(docs)
 
-    facets = facetify(query)
-
     pagination_url = build_pagination_url()
-    facet_url = pagination_url
+    facet_url = build_facet_url()
 
     template_args = {
+        'timing': rsp.get("timing", None),
         'es_query': body,
+        'timing': rsp.get("timing", None),
         'brand': brand_id,
         'docs': docs,
         'pagination': pagination,
         'pagination_url': pagination_url,
-        'facets': facets,
         'facet_url': facet_url
     }
 
     return flask.render_template('brand.html', **template_args)
+
+def brand_query(id):
+
+    brand_id = sanitize_int(id)
+
+    query = {
+        'term': {
+            'wof:brand_id': brand_id
+        }
+    }
+
+    return enfilterify(query)    
+
+@app.route("/brands/<int:id>/facets", methods=["GET"])
+@app.route("/brands/<int:id>/facets/", methods=["GET"])
+def brand_facets(id):
+
+    query = brand_query(id)
+    return send_facets(query)
 
 @app.route("/download/<int:id>", methods=["GET"])
 @app.route("/download/<int:id>/", methods=["GET"])
@@ -606,7 +659,7 @@ def download(id):
     }
 
     query = enfilterify(query)
-    facets = facetify(query)
+    facets = facetify(query)	# is this necessary (20170706/thisisaaronland)
 
     template_args = {
         'doc': doc,
@@ -675,12 +728,25 @@ def languages(spoken=False):
 def for_lang_official(lang):
     return has_language(lang)
 
+@app.route("/languages/<string:lang>/facets", methods=["GET"])
+@app.route("/languages/<string:lang>/facets/", methods=["GET"])
+def for_lang_official_facets(lang):
+    return has_language_facets(lang)
+
+
 @app.route("/languages/spoken/<string:lang>", methods=["GET"])
 @app.route("/languages/spoken/<string:lang>/", methods=["GET"])
 @app.route("/languages/<string:lang>/spoken", methods=["GET"])
 @app.route("/languages/<string:lang>/spoken/", methods=["GET"])
 def for_lang_spoken(lang):
     return has_language(lang, True)
+
+@app.route("/languages/spoken/<string:lang>/facets", methods=["GET"])
+@app.route("/languages/spoken/<string:lang>/facets/", methods=["GET"])
+@app.route("/languages/<string:lang>/spoken/facets", methods=["GET"])
+@app.route("/languages/<string:lang>/spoken/facets/", methods=["GET"])
+def for_lang_spoken_facets(lang):
+    return has_language_facets(lang, True)
 
 @app.route("/concordances/", methods=["GET"])
 @app.route("/concordances/", methods=["GET"])
@@ -732,6 +798,27 @@ def for_concordance(who):
     fullname = source.details['fullname']
 
     return has_concordance(lookup, fullname)
+
+@app.route("/concordances/<string:who>/facets", methods=["GET"])
+@app.route("/concordances/<string:who>/facets/", methods=["GET"])
+def for_concordances_facets(who):
+
+    who = sanitize_str(who)
+    source = None
+
+    if not source:
+        source = src.get_source_by_name(who)
+
+    if not source:
+        source = src.get_source_by_prefix(who)
+
+    if not source:
+        flask.abort(404)
+
+    lookup = source.lookup_key()
+    fullname = source.details['fullname']
+
+    return has_concordance_facets(lookup, fullname)
 
 @app.route("/geonames/", methods=["GET"])
 @app.route("/gn/", methods=["GET"])
@@ -846,13 +933,7 @@ def descendants(id):
         logging.warning("no record for ID %s" % id)
         flask.abort(404)
 
-    query = {
-        'term': {
-            'wof:belongsto': doc.get('id')
-        }
-    }
-
-    query = enfilterify(query)
+    query = descendants_query(id)
 
     sort = [
         { 'wof:name' : 'asc' }
@@ -879,34 +960,49 @@ def descendants(id):
 
     docs = docs_to_geojson(docs)
 
-    facets = facetify(query)
-
     pagination_url = build_pagination_url()
-    facet_url = pagination_url
+    facet_url = build_facet_url()
 
     template_args = {
+        'timing': rsp.get("timing", None),
         'doc': doc,
         'docs': docs,
         'pagination': pagination,
         'pagination_url': pagination_url,
-        'facets': facets,
         'facet_url': facet_url,
         'es_query': body,
+        'timing': rsp.get("timing", None),
     }
 
     return flask.render_template('descendants.html', **template_args)
+
+def descendants_query(id):
+
+    query = {
+        'term': {
+            'wof:belongsto': id
+        }
+    }
+    
+    return enfilterify(query)
+
+@app.route("/id/<int:id>/descendants/facets", methods=["GET"])
+@app.route("/id/<int:id>/descendants/facets/", methods=["GET"])
+def descendants_facets(id):
+
+    doc = get_by_id(id)
+
+    if not doc:
+        flask.abort(404)
+    
+    query = descendants_query(id)
+    return send_facets(query)
 
 @app.route("/megacities", methods=["GET"])
 @app.route("/megacities/", methods=["GET"])
 def megacities():
 
-    query = {
-        'term': {
-            'wof:megacity': '1'
-        }
-    }
-
-    query = enfilterify(query)
+    query = megacities_query()
 
     sort = [
         { 'gn:population': {'order': 'desc', 'mode': 'max'} },
@@ -934,34 +1030,41 @@ def megacities():
 
     docs = docs_to_geojson(docs)
 
-    facets = facetify(query)
-
     pagination_url = build_pagination_url()
-    facet_url = pagination_url
+    facet_url = build_facet_url()
 
     template_args = {
         'docs': docs,
         'pagination': pagination,
-        'facets': facets,
         'facet_url': facet_url,
         'pagination_url': pagination_url,
         'es_query': body,
+        'timing': rsp.get("timing", None),
     }
 
     return flask.render_template('megacities.html', **template_args)
+
+@app.route("/megacities/facets", methods=["GET"])
+@app.route("/megacities/facets/", methods=["GET"])
+def megacities_facets():
+    query = megacities_query()
+    return send_facets(query)
+
+def megacities_query():
+
+    query = {
+        'term': {
+            'wof:megacity': '1'
+        }
+    }
+
+    return enfilterify(query)
 
 @app.route("/nullisland", methods=["GET"])
 @app.route("/nullisland/", methods=["GET"])
 def nullisland():
 
-    query = {
-        'multi_match': {
-            'query': 0.0,
-            'fields': [ 'geom:latitude', 'geom:longitude']
-        }
-    }
-
-    query = enfilterify(query)
+    query = nullisland_query()
 
     body = {
          'query': query
@@ -983,21 +1086,37 @@ def nullisland():
 
     docs = docs_to_geojson(docs)
 
-    facets = facetify(query)
-
     pagination_url = build_pagination_url()
-    facet_url = pagination_url
+    facet_url = build_facet_url()
 
     template_args = {
         'docs': docs,
         'pagination': pagination,
         'pagination_url': pagination_url,
         'es_query': body,
-        'facets': facets,
         'facet_url': facet_url,
+        'timing': rsp.get("timing", None),
     }
 
     return flask.render_template('nullisland.html', **template_args)
+
+@app.route("/nullisland/facets", methods=["GET"])
+@app.route("/nullisland/facets/", methods=["GET"])
+def nullisland_facets():
+
+    query = nullisland_query()
+    return send_facets(query)
+
+def nullisland_query():
+
+    query = {
+        'multi_match': {
+            'query': 0.0,
+            'fields': [ 'geom:latitude', 'geom:longitude']
+        }
+    }
+
+    return enfilterify(query)
 
 @app.route("/placetypes", methods=["GET"])
 @app.route("/placetypes/", methods=["GET"])
@@ -1039,20 +1158,7 @@ def placetype(placetype):
     if not pt.is_valid_placetype(placetype) and placetype != 'airport':
         flask.abort(404)
 
-    query = {
-        'term': {
-            'wof:placetype': placetype
-        }
-    }
-
-    if placetype == 'airport':
-
-        query = {'filtered': {
-            'filter': { 'term': { 'wof:category': 'airport' } },
-            'query': { 'term': { 'wof:placetype': 'campus' } }
-        }}
-
-    query = enfilterify(query)
+    query = placetype_query(placetype)
 
     body = {
         'query': query,
@@ -1074,22 +1180,51 @@ def placetype(placetype):
 
     docs = docs_to_geojson(docs)
 
-    facets = facetify(query)
-
     pagination_url = build_pagination_url()
     facet_url = pagination_url
 
+    facet_url = build_facet_url()
+
     template_args = {
         'es_query': body,
+        'timing': rsp.get("timing", None),
         'placetype': placetype,
         'docs': docs,
         'pagination': pagination,
         'pagination_url': pagination_url,
-        'facets': facets,
         'facet_url': facet_url
     }
 
     return flask.render_template('placetype.html', **template_args)
+
+@app.route("/placetypes/<placetype>/facets", methods=["GET"])
+@app.route("/placetypes/<placetype>/facets/", methods=["GET"])
+def placetype_facets(placetype):
+
+    placetype = sanitize_str(placetype)
+
+    if not pt.is_valid_placetype(placetype) and placetype != 'airport':
+        flask.abort(404)
+
+    query = placetype_query(placetype)
+    return send_facets(query)
+
+def placetype_query(placetype):
+
+    query = {
+        'term': {
+            'wof:placetype': placetype
+        }
+    }
+
+    if placetype == 'airport':
+
+        query = {'filtered': {
+            'filter': { 'term': { 'wof:category': 'airport' } },
+            'query': { 'term': { 'wof:placetype': 'campus' } }
+        }}
+
+    return enfilterify(query)
 
 #
 
@@ -1215,24 +1350,7 @@ def mt_places_for_namespace_and_predicate_and_value(ns, pred, value):
 
 def machinetag_places(field, mt):
 
-    machinetag_filter = machinetag.elasticsearch.wildcard.query_filter_from_machinetag(mt)
-
-    query = {
-        'match_all': {}
-    }
-
-    filter = {'regexp': {
-        field : machinetag_filter
-    }}
-
-    query = {
-        'filtered': {
-            'filter': filter,
-            'query': query
-        }
-    }
-
-    query = enfilterify(query)
+    query = machinetag_places_query(field, mt)
 
     body = {
          'query': query
@@ -1254,10 +1372,8 @@ def machinetag_places(field, mt):
 
     docs = docs_to_geojson(docs)
 
-    facets = facetify(query)
-
     pagination_url = build_pagination_url()
-    facet_url = pagination_url
+    facet_url = build_facet_url()
 
     template_args = {
         'docs': docs,
@@ -1265,11 +1381,39 @@ def machinetag_places(field, mt):
         'pagination_url': pagination_url,
         'src': mt.as_string(),
         'es_query': body,
-        'facets': facets,
+        'timing': rsp.get("timing", None),
         'facet_url': facet_url,
     }
 
     return flask.render_template('machinetag_places.html', **template_args)
+
+# routing?
+
+def machinetag_places_facets(field, mt):
+
+    query = machinetag_places_query(field, mt)
+    return send_facets(query)
+
+def machinetag_places_query(field, mt):
+
+    machinetag_filter = machinetag.elasticsearch.wildcard.query_filter_from_machinetag(mt)
+
+    query = {
+        'match_all': {}
+    }
+
+    filter = {'regexp': {
+        field : machinetag_filter
+    }}
+
+    query = {
+        'filtered': {
+            'filter': filter,
+            'query': query
+        }
+    }
+
+    return enfilterify(query)
 
 def machinetag_hierarchies(field, **kwargs):
 
@@ -1355,7 +1499,7 @@ def tags():
     aggrs = {
         'placetypes': {
             'terms': {
-                'field': 'tags_all',
+                'field': 'wof:tags',
                 'size': 0,
             }
         }
@@ -1409,12 +1553,7 @@ def names():
 def tag(tag):
 
     tag = sanitize_str(tag)
-    esc_tag = flask.g.search_idx.escape(tag)
-
-    query = {
-        'match': { 'tags_all': esc_tag }
-    }
-    query = enfilterify(query)
+    query = tag_query(tag)
 
     body = {
         'query': query,
@@ -1436,10 +1575,8 @@ def tag(tag):
 
     docs = docs_to_geojson(docs)
 
-    facets = facetify(query)
-
     pagination_url = build_pagination_url()
-    facet_url = pagination_url
+    facet_url = build_facet_url()
 
     template_args = {
         'docs': docs,
@@ -1447,17 +1584,82 @@ def tag(tag):
         'pagination_url': pagination_url,
         'tag': tag,
         'es_query': body,
-        'facets': facets,
+        'timing': rsp.get("timing", None),
         'facet_url': facet_url,
     }
 
     return flask.render_template('tag.html', **template_args)
+
+@app.route("/tags/<tag>/fatets", methods=["GET"])
+@app.route("/tags/<tag>/facets/", methods=["GET"])
+def tag_facets(tag):
+
+    tag = sanitize_str(tag)
+    query = tag_query(tag)
+    return send_facets(query)
+
+def tag_query(tag):
+
+    esc_tag = flask.g.search_idx.escape(tag)
+
+    query = {
+        'match': { 'wof:tags': esc_tag }
+    }
+
+    return enfilterify(query)
 
 @app.route("/categories/<category>", methods=["GET"])
 @app.route("/categories/<category>/", methods=["GET"])
 def category(category):
 
     category = sanitize_str(category)
+    query = category_query(category)
+
+    body = {
+        'query': query,
+    }
+
+    params = {}
+
+    page = get_int('page')
+    page = get_single(page)
+
+    if page:
+        params['page'] = page
+
+    rsp = flask.g.search_idx.query(body=body, params=params)
+    rsp = flask.g.search_idx.standard_rsp(rsp, **params)
+
+    pagination = rsp['pagination']
+    docs = rsp['rows']
+
+    docs = docs_to_geojson(docs)
+
+    pagination_url = build_pagination_url()
+    facet_url = build_facet_url()
+
+    template_args = {
+        'docs': docs,
+        'pagination': pagination,
+        'pagination_url': pagination_url,
+        'category': category,
+        'es_query': body,
+        'timing': rsp.get("timing", None),
+        'facet_url': facet_url,
+    }
+
+    return flask.render_template('category.html', **template_args)
+
+@app.route("/categories/<category>/facets", methods=["GET"])
+@app.route("/categories/<category>/facets/", methods=["GET"])
+def category_facets(category):
+
+    category = sanitize_str(category)
+    query = category_query(category)
+    return send_facets(query)
+
+def category_query(category):
+
     esc_category = flask.g.search_idx.escape(category)
 
     query = {
@@ -1469,7 +1671,16 @@ def category(category):
         }
     }
 
-    query = enfilterify(query)
+    return enfilterify(query)
+
+@app.route("/postalcode/<code>", methods=["GET"])
+@app.route("/postalcode/<code>/", methods=["GET"])
+@app.route("/postalcodes/<code>", methods=["GET"])
+@app.route("/postalcodes/<code>/", methods=["GET"])
+def code(code):
+
+    code = sanitize_str(code)
+    query = code_query(code)
 
     body = {
         'query': query,
@@ -1491,30 +1702,33 @@ def category(category):
 
     docs = docs_to_geojson(docs)
 
-    facets = facetify(query)
-
     pagination_url = build_pagination_url()
-    facet_url = pagination_url
+    facet_url = build_facet_url()
 
     template_args = {
         'docs': docs,
         'pagination': pagination,
         'pagination_url': pagination_url,
-        'category': category,
+        'postcode': code,
         'es_query': body,
-        'facets': facets,
+        'timing': rsp.get("timing", None),
         'facet_url': facet_url,
     }
 
-    return flask.render_template('category.html', **template_args)
+    return flask.render_template('postcode.html', **template_args)
 
-@app.route("/postalcode/<code>", methods=["GET"])
-@app.route("/postalcode/<code>/", methods=["GET"])
-@app.route("/postalcodes/<code>", methods=["GET"])
-@app.route("/postalcodes/<code>/", methods=["GET"])
-def code(code):
+@app.route("/postalcode/<code>/facets", methods=["GET"])
+@app.route("/postalcode/<code>/facets/", methods=["GET"])
+@app.route("/postalcodes/<code>/facets", methods=["GET"])
+@app.route("/postalcodes/<code>/facets/", methods=["GET"])
+def code_facets(code):
 
     code = sanitize_str(code)
+    query = code_query(code)
+    return send_facets(query)
+
+def code_query(code):
+
     esc_code = flask.g.search_idx.escape(code)
 
     query = {
@@ -1526,44 +1740,7 @@ def code(code):
         }
     }
 
-    query = enfilterify(query)
-
-    body = {
-        'query': query,
-    }
-
-    params = {}
-
-    page = get_int('page')
-    page = get_single(page)
-
-    if page:
-        params['page'] = page
-
-    rsp = flask.g.search_idx.query(body=body, params=params)
-    rsp = flask.g.search_idx.standard_rsp(rsp, **params)
-
-    pagination = rsp['pagination']
-    docs = rsp['rows']
-
-    docs = docs_to_geojson(docs)
-
-    facets = facetify(query)
-
-    pagination_url = build_pagination_url()
-    facet_url = pagination_url
-
-    template_args = {
-        'docs': docs,
-        'pagination': pagination,
-        'pagination_url': pagination_url,
-        'postcode': code,
-        'es_query': body,
-        'facets': facets,
-        'facet_url': facet_url,
-    }
-
-    return flask.render_template('postcode.html', **template_args)
+    return enfilterify(query)
 
 # https://developer.mozilla.org/en-US/Add-ons/Creating_OpenSearch_plugins_for_Firefox
 # http://www.opensearch.org/Specifications/OpenSearch/Extensions/Parameter/1.0
@@ -1606,7 +1783,6 @@ def searchify():
 
     q = get_str('q')
     q = get_single(q)
-
 
     if q and re.match(r'^\d+$', q):
 
@@ -1657,10 +1833,8 @@ def searchify():
 
     docs = docs_to_geojson(docs)
 
-    facets = facetify(query['query'])
-
     pagination_url = build_pagination_url()
-    facet_url = pagination_url
+    facet_url = build_facet_url()
 
     template_args = {
         'docs': docs,
@@ -1669,13 +1843,20 @@ def searchify():
         'query': q,
         'query_string': query_string,
         'es_query': query,
-        'facets': facets,
+        'timing': rsp.get("timing", None),
         'facet_url': facet_url,
     }
 
     return flask.render_template('search_results.html', **template_args)
 
-def do_search():
+@app.route("/search/facets", methods=["GET"])
+@app.route("/search/facets/", methods=["GET"])
+def search_facets():
+
+    query = search_query()
+    return send_facets(query)
+
+def search_query():
 
     q = get_str('q')
     q = get_single(q)
@@ -1763,6 +1944,12 @@ def do_search():
         }
     }
 
+    return query_scored
+
+def do_search():
+
+    query = search_query()
+
     # 4. sorting
 
     sort = [
@@ -1773,7 +1960,7 @@ def do_search():
     ]
 
     body = {
-        'query': query_scored,
+        'query': query,
         'sort': sort,
     }
 
@@ -1805,7 +1992,7 @@ def facetify(query):
         },
         'tag': {
             'terms': {
-                'field': 'tags_all',
+                'field': 'wof:tags',
                 'size': 0,
             }
         },
@@ -1832,7 +2019,20 @@ def facetify(query):
                 'field': 'wof:concordances_sources',
                 'size': 0
             }
+        },
+        'translations': {
+            'terms': {
+                'field': 'translations',
+                'size': 0
+            }
+        },
+        'is_current': {
+            'terms': {
+                'field': 'mz:is_current',
+                'size': 0
+            }
         }
+
     }
 
     body = {
@@ -1853,6 +2053,15 @@ def facetify(query):
 
         if k == 'concordance':
             append_source_details_to_buckets(results)
+
+        elif k == 'iso':
+            append_country_details_to_buckets(results)
+
+        elif k == 'translations':
+            append_language_details_to_buckets(results)
+        
+        else:
+            pass
 
         facets[k] = results
 
@@ -1884,6 +2093,11 @@ def enfilterify(query):
 
     colloquial = get_str('colloquial')	# names_colloquial
     variant = get_str('variant')	# names_variant
+
+    translations = get_str('translations')
+
+    is_current = get_int('is_current')
+    is_current = get_single(is_current)
 
     country = get_int('country_id')
     region = get_int('region_id')
@@ -1947,23 +2161,65 @@ def enfilterify(query):
 
             pts.append(p)
 
-            # placetype = pt.placetype(p)
-            # ids.append(placetype.id())
-
         if len(ids) == 1:
 
             filters.append({ 'term': {
-                # 'wof:placetype_id' : ids[0]
                 'wof:placetype': pts[0]
             }})
 
         else:
 
             filters.append({ 'terms': {
-                # 'wof:placetype_id' : ids
                 'wof:placetype': pts
             }})
 
+    if is_current in (-1, 0, 1):
+
+        filters.append({ 'term': {
+            'mz:is_current': is_current
+        }})
+
+    if translations:
+
+        if len(translations) == 1:
+
+            translations = translations[0]
+
+            if translations.startswith("!"):
+
+                mustnot.append({ 'term': {
+                    'translations': translations[1:]
+                }})
+
+            else:
+
+                filters.append({ 'term': {
+                    'translations': translations
+                }})
+                    
+        else:
+
+            with_translations = []
+            without_translations = []
+
+            for t in translations:
+
+                if t.startswith("!"):
+                    without_translations.append(t[1:])
+                else:
+                    with_translations.append(t)
+
+            if len(with_translations):
+
+                filters.append({ 'terms': {
+                    'translations': with_translations
+                }})
+
+            if len(without_translations):
+
+                must_not.append({ 'terms': {
+                    'translations': without_translations
+                }})
 
     if iso:
 
@@ -1980,7 +2236,7 @@ def enfilterify(query):
             esc_tag = flask.g.search_idx.escape(tag)
 
             filters.append({ 'query': { 'match': {
-                'tags_all': esc_tag,
+                'wof:tags': esc_tag,
             }}})
 
         else:
@@ -1990,7 +2246,7 @@ def enfilterify(query):
             if len(esc_tags) == 1:
 
                 filters.append({ 'term': {
-                    'tags_all' : esc_tags[0],
+                    'wof:tags' : esc_tags[0],
                 }})
 
             else:
@@ -1998,7 +2254,7 @@ def enfilterify(query):
                 must = []
 
                 for t in esc_tags:
-                    must.append({ 'term': { 'tags_all': t }})
+                    must.append({ 'term': { 'wof:tags': t }})
 
                 filters.append({ 'bool': {
                     'must': must
@@ -2172,6 +2428,13 @@ def build_pagination_url():
 
     return "%s?%s" % (url, qs)
 
+def build_facet_url():
+
+    pg_url = build_pagination_url()
+    path, query = pg_url.split("?")
+
+    return path + "facets/?" + query
+
 def get_by_id(id):
 
     query = {
@@ -2197,24 +2460,7 @@ def get_by_id(id):
 def has_concordance(src, label):
 
     src = sanitize_str(src)
-    concordance = "wof:concordances.%s" % src
-
-    filter = {
-            'exists': { 'field': concordance  }
-    }
-
-    query = {
-        'match_all': {}
-    }
-
-    query = {
-        'filtered': {
-            'filter': filter,
-            'query': query
-        }
-    }
-
-    query = enfilterify(query)
+    query = has_concordance_query(src)
 
     body = {
          'query': query
@@ -2236,22 +2482,47 @@ def has_concordance(src, label):
 
     docs = docs_to_geojson(docs)
 
-    facets = facetify(query)
-
     pagination_url = build_pagination_url()
-    facet_url = pagination_url
-
+    facet_url = build_facet_url()
+        
     template_args = {
         'docs': docs,
         'pagination': pagination,
         'pagination_url': pagination_url,
         'src': label,
         'es_query': body,
-        'facets': facets,
+        'timing': rsp.get("timing", None),
         'facet_url': facet_url,
     }
 
     return flask.render_template('concordance.html', **template_args)
+
+def has_concordance_facets(src, label):
+
+    src = sanitize_str(src)
+    query = has_concordance_query(src)
+    return send_facets(query)
+
+def has_concordance_query(src):
+
+    concordance = "wof:concordances.%s" % src
+
+    filter = {
+            'exists': { 'field': concordance  }
+    }
+
+    query = {
+        'match_all': {}
+    }
+
+    query = {
+        'filtered': {
+            'filter': filter,
+            'query': query
+        }
+    }
+
+    return enfilterify(query)
 
 def get_by_concordance(id, src):
 
@@ -2276,6 +2547,59 @@ def get_by_concordance(id, src):
 def has_language(lang, spoken=False):
 
     lang = sanitize_str(lang)
+    lang_common, query = has_language_query(lang, spoken)
+
+    body = {
+         'query': query
+    }
+
+    params = {}
+
+    page = get_int('page')
+    page = get_single(page)
+
+    if page:
+        params['page'] = page
+
+    rsp = flask.g.search_idx.query(body=body, params=params)
+    rsp = flask.g.search_idx.standard_rsp(rsp, **params)
+
+    pagination = rsp['pagination']
+    docs = rsp['rows']
+
+    docs = docs_to_geojson(docs)
+
+    pagination_url = build_pagination_url()
+    facet_url = build_facet_url()
+
+    template_args = {
+        'docs': docs,
+        'pagination': pagination,
+        'pagination_url': pagination_url,
+        'lang': lang,
+        'lang_common': lang_common,
+        'es_query': body,
+        'timing': rsp.get("timing", None),
+        'facet_url': facet_url,
+    }
+
+    template = "has_language_official.html"
+
+    if spoken:
+        template = "has_language_spoken.html"
+
+    return flask.render_template(template, **template_args)
+
+# routing?
+
+def has_language_facets(lang, spoken=False):
+
+    lang = sanitize_str(lang)
+
+    lang_common, query = has_language_query(lang, spoken)
+    return send_facets(query)
+
+def has_language_query(lang, spoken):
 
     pylang = None
 
@@ -2329,48 +2653,7 @@ def has_language(lang, spoken=False):
             }
     }
 
-    body = {
-         'query': query
-    }
-
-    params = {}
-
-    page = get_int('page')
-    page = get_single(page)
-
-    if page:
-        params['page'] = page
-
-    rsp = flask.g.search_idx.query(body=body, params=params)
-    rsp = flask.g.search_idx.standard_rsp(rsp, **params)
-
-    pagination = rsp['pagination']
-    docs = rsp['rows']
-
-    docs = docs_to_geojson(docs)
-
-    facets = facetify(query)
-
-    pagination_url = build_pagination_url()
-    facet_url = pagination_url
-
-    template_args = {
-        'docs': docs,
-        'pagination': pagination,
-        'pagination_url': pagination_url,
-        'lang': lang,
-        'lang_common': lang_common,
-        'es_query': body,
-        'facets': facets,
-        'facet_url': facet_url,
-    }
-
-    template = "has_language_official.html"
-
-    if spoken:
-        template = "has_language_spoken.html"
-
-    return flask.render_template(template, **template_args)
+    return lang_common, query
 
 def inflate_hierarchy(doc):
 
@@ -2419,6 +2702,43 @@ def append_source_details_to_buckets(buckets):
         else:
             b['fullname'] = prefix
             b['name'] = prefix
+
+def append_language_details_to_buckets(buckets):
+
+    for b in buckets:
+
+        tag = b["key"]
+
+        b["name"] = tag
+        b["fullname"] = tag
+
+        try:
+            lang = mapzen.whosonfirst.languages.language(tag)
+            b["name"] = str(lang)
+            b["fullname"] = b["name"]
+
+        except Exception, e:
+            logging.warning("failed to parse language tag '%s' because %s" % (tag, e))
+
+def append_country_details_to_buckets(buckets):
+
+    for b in buckets:
+
+        code = b["key"]
+
+        b["name"] = code
+        b["fullname"] = code
+
+        try:
+            
+            c = pycountry.countries.get(alpha2=code.upper())
+            name = c.name
+
+            b["name"] = name
+            b["fullname"] = name
+
+        except Exception, e:
+            logging.warning("failed to parse country code '%s' because %s" % (code, e))
 
 # please put me in a library somewhere...
 # please to be porting this at the same time...
@@ -2541,6 +2861,10 @@ def doc_to_geojson(doc):
         'geometry': geom,
         'properties': properties
     }
+
+def send_facets(query):
+    facets = facetify(query)
+    return flask.jsonify(facets)
 
 if __name__ == '__main__':
 
