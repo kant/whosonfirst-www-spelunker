@@ -7,8 +7,7 @@
 		var footer = document.getElementById("footer");
 		var script = document.createElement("script");
 		script.setAttribute("type", "text/javascript");
-		script.setAttribute("src", "{{ url_for('static', filename='javascript/whosonfirst.www.js',  _external=True) }}");
-
+                script.setAttribute("src", "{{ url_for('static', filename='javascript/whosonfirst.www.js',  _external=True) }}");
 		footer.appendChild(script);
         });
 
