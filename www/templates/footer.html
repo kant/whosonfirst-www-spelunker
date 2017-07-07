@@ -7,14 +7,14 @@
 		var footer = document.getElementById("footer");
 		var script = document.createElement("script");
 		script.setAttribute("type", "text/javascript");
-		script.setAttribute("src", "{{ url_for('static', filename='javascript/whosonfirst.www.js') }}");
+		script.setAttribute("src", "{{ url_for('static', filename='javascript/whosonfirst.www.js',  _external=True) }}");
 
 		footer.appendChild(script);
         });
 
 	</script>
 
-	<script src="{{ url_for('static', filename='javascript/mapzen.whosonfirst.boundaryissues.js') }}"></script>
+	<script src="{{ url_for('static', filename='javascript/mapzen.whosonfirst.boundaryissues.js',  _external=True) }}"></script>
 
 	<script type="text/javascript">
 	  window.addEventListener("load", function load(event){
