@@ -250,7 +250,14 @@ mapzen.whosonfirst.bundler = (function() {
 					return;
 				}
 
+				if (_handlers.on_feature_download) {
+					feature = _handlers.on_feature_download({
+						feature: feature,
+						bundle_count: _features.length
+					});
+				}
 				_features.push(feature);
+
 				if (summarize_feature) {
 					_summary.push({
 						'wof:id': feature.properties['wof:id'],
@@ -259,13 +266,6 @@ mapzen.whosonfirst.bundler = (function() {
 						'wof:placetype': feature.properties['wof:placetype'],
 						'wof:country': feature.properties['wof:country'],
 						'wof:repo': feature.properties['wof:repo']
-					});
-				}
-
-				if (_handlers.on_feature_download) {
-					_handlers.on_feature_download({
-						feature: feature,
-						bundle_count: _features.length
 					});
 				}
 
@@ -301,11 +301,14 @@ mapzen.whosonfirst.bundler = (function() {
 			saveAs(blob, filename);
 		},
 
-		get_summary_blob: function(filename) {
+		get_summary_csv: function() {
 			var summary = self.summarize_features();
 			var process_row = function(row) {
 				var processed = '', value;
 				for (var i = 0; i < row.length; i++) {
+					if (typeof row[i] == 'undefined') {
+						row[i] = '';
+					}
 					value = (row[i] === null) ? '' : row[i].toString();
 					if (row[i] instanceof Date) {
 						value = row[i].toLocaleString();
@@ -327,6 +330,11 @@ mapzen.whosonfirst.bundler = (function() {
 				csv += process_row(summary[i]);
 			}
 
+			return csv;
+		},
+
+		get_summary_blob: function(filename) {
+			var csv = self.get_summary_csv();
 			var args = {
 				type: 'text/csv;charset=utf-8;'
 			};

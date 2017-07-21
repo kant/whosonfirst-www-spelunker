@@ -6,6 +6,7 @@ import logging
 import urlparse
 import urllib
 import codecs
+import requests
 
 import flask
 import werkzeug
@@ -128,7 +129,13 @@ def init():
     flask.g.static_root = static_root
 
     flask.g.enable_feature_bundler = int(os.environ.get('SPELUNKER_ENABLE_FEATURE_BUNDLER', 0))
+    flask.g.enable_feature_bundler_gists = int(os.environ.get('SPELUNKER_ENABLE_FEATURE_BUNDLER_GISTS', 0))
     flask.g.enable_feature_staticmaps = int(os.environ.get('SPELUNKER_ENABLE_FEATURE_STATICMAPS', 0))
+
+    flask.g.github_client_id = os.environ.get('SPELUNKER_GITHUB_CLIENT_ID', '')
+    flask.g.github_client_secret = os.environ.get('SPELUNKER_GITHUB_CLIENT_SECRET', '')
+    flask.g.github_redirect_uri = os.environ.get('SPELUNKER_GITHUB_REDIRECT_URI', '')
+    flask.g.github_state = os.environ.get('SPELUNKER_GITHUB_STATE', '')
 
 @app.template_filter()
 def country_name(code):
@@ -395,7 +402,7 @@ def lastmod_days_query(days):
     query = {
         'range': {
             'wof:lastmodified': { 'gte': then, 'lte': now }
-        }    
+        }
     }
 
     return enfilterify(query)
@@ -423,7 +430,7 @@ def current():
 
     query = current_query()
     query = enfilterify(query)
-    
+
     sort = [
         { 'wof:lastmodified': { 'order': 'desc', 'mode': 'max' } }
     ]
@@ -629,7 +636,7 @@ def brand_query(id):
         }
     }
 
-    return enfilterify(query)    
+    return enfilterify(query)
 
 @app.route("/brands/<int:id>/facets", methods=["GET"])
 @app.route("/brands/<int:id>/facets/", methods=["GET"])
@@ -983,7 +990,7 @@ def descendants_query(id):
             'wof:belongsto': id
         }
     }
-    
+
     return enfilterify(query)
 
 @app.route("/id/<int:id>/descendants/facets", methods=["GET"])
@@ -994,7 +1001,7 @@ def descendants_facets(id):
 
     if not doc:
         flask.abort(404)
-    
+
     query = descendants_query(id)
     return send_facets(query)
 
@@ -1793,7 +1800,7 @@ def searchify():
 
         if get_by_id(id):
             location = flask.url_for('info', id=id, _external=True)
-            return flask.redirect(location, code=303)        
+            return flask.redirect(location, code=303)
 
     try:
         query, params, rsp = do_search()
@@ -1848,6 +1855,38 @@ def searchify():
     }
 
     return flask.render_template('search_results.html', **template_args)
+
+@app.route("/auth", methods=["GET"])
+@app.route("/auth/", methods=["GET"])
+def auth():
+    code = get_str('code')
+    if not code:
+        url = "http://github.com/login/oauth/authorize?" + urllib.urlencode({
+            'client_id': flask.g.github_client_id,
+            'redirect_uri': flask.g.github_redirect_uri,
+            'state': flask.g.github_state,
+            'scope': 'gist'
+        })
+        return flask.redirect(url, code=302)
+    else:
+        r = requests.post("https://github.com/login/oauth/access_token", {
+            'client_id': flask.g.github_client_id,
+            'client_secret': flask.g.github_client_secret,
+            'code': code,
+            'redirect_uri': flask.g.github_redirect_uri,
+            'state': flask.g.github_state
+        })
+        rsp = dict(urlparse.parse_qsl(r.text))
+        if 'access_token' not in rsp:
+            return "Error: could not sign you into GitHub (no access token)"
+
+        if not re.match('^[a-f0-9]+$', rsp['access_token']):
+            return "Error: could not sign you into GitHub (invalid access token)"
+
+        template_args = {
+            'access_token': rsp['access_token']
+        }
+        return flask.render_template('auth.html', **template_args)
 
 @app.route("/search/facets", methods=["GET"])
 @app.route("/search/facets/", methods=["GET"])
@@ -2031,8 +2070,13 @@ def facetify(query):
                 'field': 'mz:is_current',
                 'size': 0
             }
+        },
+        'geometry': {
+            'terms': {
+                'field': 'geom:type',
+                'size': 0
+            }
         }
-
     }
 
     body = {
@@ -2059,7 +2103,7 @@ def facetify(query):
 
         elif k == 'translations':
             append_language_details_to_buckets(results)
-        
+
         else:
             pass
 
@@ -2098,6 +2142,8 @@ def enfilterify(query):
 
     is_current = get_int('is_current')
     is_current = get_single(is_current)
+
+    geom = get_str('geometry')
 
     country = get_int('country_id')
     region = get_int('region_id')
@@ -2196,7 +2242,7 @@ def enfilterify(query):
                 filters.append({ 'term': {
                     'translations': translations
                 }})
-                    
+
         else:
 
             with_translations = []
@@ -2228,6 +2274,7 @@ def enfilterify(query):
 
         filters.append(simple_enfilter('iso:country', iso))
 
+        
     if tag:
 
         if len(tag) == 1:
@@ -2288,6 +2335,9 @@ def enfilterify(query):
             filters.append({'regexp':{
                 machinetag_field : machinetag_filter
             }})
+
+    if geom:
+        filters.append(simple_enfilter('geom:type', geom))
 
     if names:
         filters.append(simple_enfilter('names_all', names))
@@ -2484,7 +2534,7 @@ def has_concordance(src, label):
 
     pagination_url = build_pagination_url()
     facet_url = build_facet_url()
-        
+
     template_args = {
         'docs': docs,
         'pagination': pagination,
@@ -2730,7 +2780,7 @@ def append_country_details_to_buckets(buckets):
         b["fullname"] = code
 
         try:
-            
+
             c = pycountry.countries.get(alpha2=code.upper())
             name = c.name
 

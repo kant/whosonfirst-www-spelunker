@@ -103,3 +103,8 @@ dev-to-mz:
 	git push origin mapzen
 	git checkout master
 	git checkout dev
+
+d2mz: dev-to-mz
+
+simple_properties:
+	curl -s -o www/static/meta/simple_properties.json https://raw.githubusercontent.com/whosonfirst/whosonfirst-properties/master/aliases/simple_properties.json
