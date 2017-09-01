@@ -64,6 +64,8 @@ mapzen.whosonfirst.cache = (function() {
 		'created': ts
 	    };
 	    
+	    console.log("[cache]", "SET", key, disable_cache);
+
 	    localforage.setItem(key, wrapper).then(function(v){
 		// woo woo
 	    }).catch(function(err){
