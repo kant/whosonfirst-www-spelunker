@@ -3,6 +3,8 @@ mapzen.whosonfirst = mapzen.whosonfirst || {};
 
 mapzen.whosonfirst.net = (function(){
 
+	var default_cache_ttl = 30000; // ms
+
 	var self = {
 
 		'encode_query': function(query){

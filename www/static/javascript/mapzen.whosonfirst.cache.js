@@ -3,7 +3,6 @@ mapzen.whosonfirst = mapzen.whosonfirst || {};
 
 mapzen.whosonfirst.cache = (function() {
 
-    var default_cache_ttl = 30000; // ms
     var disable_cache = false;
 
     var self = {
@@ -46,13 +45,14 @@ mapzen.whosonfirst.cache = (function() {
 	    return true;
 	},
 
-	'set': function(key, data){
+	'set': function(key, value){
 
 	    if (typeof(localforage) != 'object'){
 		return false;
 	    }
 	    
 	    if (disable_cache){
+		console.log("[cache]", "DISABLED?", disable_cache);
 		return false;
 	    }
 	    
@@ -67,14 +67,16 @@ mapzen.whosonfirst.cache = (function() {
 	    localforage.setItem(key, wrapper).then(function(v){
 		// woo woo
 	    }).catch(function(err){
+
+		console.log("[cache]", "ERR", key, err, disable_cache);
 		
 		// https://github.com/whosonfirst/whosonfirst-www-spelunker/issues/126
 		
 		if (err['code'] == 4){
+		    console.log("[cache]", "DISABLE");
 		    disable_cache = true;
 		}
 
-		console.log("[cache]", "ERR", key, err);
 	    });
 	    
 	    return true;
