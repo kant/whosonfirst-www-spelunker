@@ -3,9 +3,6 @@ mapzen.whosonfirst = mapzen.whosonfirst || {};
 
 mapzen.whosonfirst.net = (function(){
 
-	var default_cache_ttl = 30000; // ms
-    	var disable_cache = false;
-
 	var self = {
 
 		'encode_query': function(query){
@@ -135,89 +132,21 @@ mapzen.whosonfirst.net = (function(){
 		},
 
 		'cache_get': function(key, on_hit, on_miss, cache_ttl){
-
-			if (typeof(localforage) != 'object'){
-				return false;
-			}
-
-			var fq_key = self.cache_prep_key(key);
-
-			localforage.getItem(fq_key, function (err, rsp){
-
-				if ((err) || (! rsp)){
-					on_miss();
-					return;
-				}
-
-				var data = rsp['data'];
-
-				if (! data){
-					on_miss();
-					return;
-				}
-
-				var dt = new Date();
-				var ts = dt.getTime();
-
-				var then = rsp['created'];
-				var diff = ts - then;
-
-				if (diff > cache_ttl){
-					self.cache_unset(key);
-					on_miss();
-					return;
-				}
-
-				on_hit(data);
-			});
-
-			return true;
+		    
+		    var fq_key = self.cache_prep_key(key);
+		    return mapzen.whosonfirst.cache.get(fq_key, on_hit, on_miss, cache_ttl);
 		},
 
 		'cache_set': function(key, value){
 
-			if (typeof(localforage) != 'object'){
-			    return false;
-			}
-
-		    	if (disable_cache){
-			    return false;
-			}
-
-			var dt = new Date();
-			var ts = dt.getTime();
-
-			var wrapper = {
-				'data': value,
-				'created': ts
-			};
-
-			key = self.cache_prep_key(key);
-
-			localforage.setItem(key, wrapper).then(function(v){
-			    // woo woo
-			}).catch(function(err){
-			    
-			    // https://github.com/whosonfirst/whosonfirst-www-spelunker/issues/126
-
-			    if (err['code'] == 4){
-				disable_cache = true;
-			    }
-			});
-
-			return true;
+		    var fq_key = self.cache_prep_key(key);
+		    return mapzen.whosonfirst.cache.set(fq_key, value);
 		},
 
 		'cache_unset': function(key){
 
-			if (typeof(localforage) != 'object'){
-				return false;
-			}
-
-			key = self.cache_prep_key(key);
-
-			localforage.removeItem(key);
-			return true;
+		    var fq_key = self.cache_prep_key(key);
+		    return mapzen.whosonfirst.cache.unset(fq_key);
 		},
 
 		'cache_prep_key': function(key){
