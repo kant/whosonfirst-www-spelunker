@@ -1847,9 +1847,6 @@ def search_wofs():
     rsp = flask.g.search_idx.standard_rsp(rsp, **params)
 
     docs = rsp['rows']
-
-    docs = docs_to_geojson(docs)
-
     return jsonify(docs)
 
 
