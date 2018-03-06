@@ -15,6 +15,8 @@ from werkzeug.contrib.fixers import ProxyFix
 from werkzeug.datastructures import Headers
 from flask_cors import cross_origin
 
+from flask import jsonify
+
 import re
 import datetime
 import time
@@ -1791,6 +1793,66 @@ def opensearch_scoped(scope):
     body = flask.render_template('opensearch.xml', scope=scope, label=valid[scope])
     return flask.Response(body, headers=headers)
 
+
+
+@app.route("/search_wofs", methods=["GET"])
+@app.route("/search_wofs/", methods=["GET"])
+def search_wofs():
+    fields = ['wof:name', 'wof:placetype']
+    q = get_str('q')
+    q = get_single(q)
+
+    if q and re.match(r'^\d+$', q):
+
+        id = int(q)
+
+        # if we don't this then things like '90210' will result in hillarity
+        # (20161201/thisisaaronland)
+
+        if get_by_id(id):
+            location = flask.url_for('info', id=id, _external=True)
+            return flask.redirect(location, code=303)
+
+    try:
+        query, params, rsp = do_search(fields=fields)
+    except Exception, e:
+        logging.error("query failed because %s" % e)
+        return flask.render_template('search_form.html', error=True)
+
+    # see also: https://github.com/whosonfirst/whosonfirst-www-spelunker/issues/6
+
+    query_string = None
+
+    q = get_str('q')
+    q = get_single(q)
+
+    name = get_str('name')
+    name = get_single(name)
+
+    names = get_str('names')
+    names = get_single(names)
+
+    preferred = get_str('preferred')
+    preferred = get_single(preferred)
+
+    alt = get_str('alt')
+    alt = get_single(alt)
+
+    for possible in (q, name, names, preferred, alt):
+
+        if possible != None and possible != "":
+            query_string = possible
+            break
+
+    rsp = flask.g.search_idx.standard_rsp(rsp, **params)
+
+    docs = rsp['rows']
+
+    docs = docs_to_geojson(docs)
+
+    return jsonify(docs)
+
+
 @app.route("/search", methods=["GET"])
 @app.route("/search/", methods=["GET"])
 def searchify():
@@ -1992,7 +2054,7 @@ def search_query():
 
     return query_scored
 
-def do_search():
+def do_search(fields=None):
 
     query = search_query()
 
@@ -2009,6 +2071,8 @@ def do_search():
         'query': query,
         'sort': sort,
     }
+    if fields is not None:
+        body['fields'] = fields
 
     params = {}
 
