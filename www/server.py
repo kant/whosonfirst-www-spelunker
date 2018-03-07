@@ -1987,7 +1987,9 @@ def search_query(wildcard=False):
             }
         else:
             query = {
-                'wildcard': "{}*".format(esc_q)
+                'wildcard': {
+                    "_all": "{}*".format(esc_q)
+                }
             }
 
     # searching for stuff breaks down in to four distinct parts - which should
