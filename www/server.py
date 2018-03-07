@@ -1814,7 +1814,7 @@ def search_wofs():
             return flask.redirect(location, code=303)
 
     try:
-        query, params, rsp = do_search(fields=fields)
+        query, params, rsp = do_search(fields=fields, wildcard=True)
     except Exception, e:
         logging.error("query failed because %s" % e)
         return flask.render_template('search_form.html', error=True)
@@ -1961,7 +1961,7 @@ def search_facets():
     query = search_query()
     return send_facets(query)
 
-def search_query():
+def search_query(wildcard=False):
 
     q = get_str('q')
     q = get_single(q)
@@ -1981,10 +1981,14 @@ def search_query():
 
     else:
         esc_q = flask.g.search_idx.escape(q)
-
-        query = {
-            'match': { '_all': { 'query': esc_q, 'operator': 'and' } }
-        }
+        if not wildcard:
+            query = {
+                'match': { '_all': { 'query': esc_q, 'operator': 'and' } }
+            }
+        else:
+            query = {
+                'wildcard': "{}*".format(esc_q)
+            }
 
     # searching for stuff breaks down in to four distinct parts - which should
     # be interpreted as "wet paint", "I have no idea what I am dooooing" and so on...
@@ -2051,9 +2055,9 @@ def search_query():
 
     return query_scored
 
-def do_search(fields=None):
+def do_search(fields=None, wildcard=False):
 
-    query = search_query()
+    query = search_query(wildcard)
 
     # 4. sorting
 
