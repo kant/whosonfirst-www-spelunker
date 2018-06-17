@@ -1,6 +1,6 @@
 # whosonfirst-www-spelunker
 
-A simple Flask-based spelunker for poking around Who's On First data stored in an [Elasticsearch](https://github.com/mapzen/py-mapzen-whosonfirst-search)) document index.
+A simple Flask-based spelunker for poking around Who's On First data stored in an [Elasticsearch](https://github.com/mapzen/py-mapzen-whosonfirst-search) document index.
 
 The spelunker is very much a tool to help work through what the public-facing resource (spelunker) _should_ as it is to help us (Mapzen) visualize and sanity check the
 data. The spelunker does many things but it does not do everything yet, or in some cases ever.
